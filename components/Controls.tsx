@@ -14,7 +14,6 @@ interface ControlsProps {
   setGameLevel: (level: GameLevel) => void;
   orientation: Orientation;
   setOrientation: (o: Orientation) => void;
-  reset: () => void;
   onClose: () => void;
 }
 
@@ -26,12 +25,10 @@ export const Controls: React.FC<ControlsProps> = ({
   patienceDuration,
   setPatienceDuration,
   isRunning,
-  setIsRunning,
   gameLevel,
   setGameLevel,
   orientation,
   setOrientation,
-  reset,
   onClose
 }) => {
 
@@ -185,25 +182,6 @@ export const Controls: React.FC<ControlsProps> = ({
              </div>
           </div>
         )}
-
-        {/* Action Buttons */}
-        <div className="grid grid-cols-2 gap-3 pt-2">
-          <button
-            onClick={() => { setIsRunning(!isRunning); onClose(); }}
-            className={`py-3 px-4 rounded-xl font-bold text-white shadow-lg transition-transform hover:scale-105 active:scale-95 ${
-              isRunning ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'
-            }`}
-          >
-            {isRunning ? '⏸ Pause' : '▶ START GAME'}
-          </button>
-          
-          <button
-            onClick={reset}
-            className="py-3 px-4 rounded-xl font-bold text-gray-600 bg-gray-200 hover:bg-gray-300 transition-colors"
-          >
-            🔄 Reset
-          </button>
-        </div>
       </div>
     </div>
   );

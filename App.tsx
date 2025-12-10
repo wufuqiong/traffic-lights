@@ -3,7 +3,6 @@ import { TrafficLight } from './components/TrafficLight';
 import { Controls } from './components/Controls';
 import { RoadScene } from './components/RoadScene';
 import { LightState, Mode, GameLevel, Orientation } from './types';
-import { generateSafetyTip } from './services/geminiService';
 
 const YELLOW_DURATION = 3;
 
@@ -22,15 +21,13 @@ const App: React.FC = () => {
   const [lightState, setLightState] = useState<LightState>(LightState.RED);
   const [timer, setTimer] = useState<number>(15);
   const [isRunning, setIsRunning] = useState<boolean>(false);
-  const [safetyTip, setSafetyTip] = useState<string>("");
-  const [showTip, setShowTip] = useState<boolean>(false);
 
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Derived State
   const mode = gameLevel === GameLevel.WALKER_NORMAL ? Mode.WALK : Mode.CAR;
   
-  // Logic to hide timer in Patience Level
+  // Logic to hide timer in Patience Level (Only applies to Red light)
   const shouldHideTimer = gameLevel === GameLevel.LONG_WAIT && lightState === LightState.RED && timer > 15;
 
   // Initialize and Handle Game Level Changes
@@ -41,12 +38,9 @@ const App: React.FC = () => {
         
         if (gameLevel === GameLevel.LONG_WAIT) {
             setTimer(patienceDuration);
-            setSafetyTip("Patience is a virtue! Wait for the signal.");
         } else {
             setTimer(userRedSetting);
-            setSafetyTip(gameLevel === GameLevel.CAR_NORMAL ? "Ready to drive?" : "Ready to walk?");
         }
-        setShowTip(true);
     }
   }, [gameLevel, userRedSetting, patienceDuration, isRunning]);
 
@@ -79,7 +73,6 @@ const App: React.FC = () => {
         case LightState.RED:
           // Red -> Green
           setTimer(userGreenSetting);
-          setShowTip(false); 
           return LightState.GREEN;
           
         case LightState.GREEN:
@@ -94,20 +87,12 @@ const App: React.FC = () => {
              nextRedDuration = patienceDuration;
           }
           setTimer(nextRedDuration);
-          fetchTip(); 
           return LightState.RED;
           
         default:
           return LightState.RED;
       }
     });
-  };
-
-  const fetchTip = async () => {
-    setShowTip(true);
-    setSafetyTip("Thinking...");
-    const tip = await generateSafetyTip();
-    setSafetyTip(tip);
   };
 
   const reset = () => {
@@ -120,9 +105,6 @@ const App: React.FC = () => {
     } else {
         setTimer(userRedSetting);
     }
-    
-    setShowTip(true);
-    setSafetyTip("Ready to start?");
   };
 
   return (
@@ -137,17 +119,26 @@ const App: React.FC = () => {
         {/* Top Controls Area */}
         <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-start pointer-events-auto z-20">
             
-            {/* Top Left: Start Button */}
-            {!isRunning && !showSettings ? (
+            {/* Top Left: Game Controls */}
+            <div className="flex gap-2">
                 <button 
-                onClick={() => setIsRunning(true)}
-                className="bg-green-500 hover:bg-green-600 text-white font-black text-xl py-3 px-8 rounded-full shadow-[0_4px_10px_rgba(34,197,94,0.4)] border-4 border-green-400 hover:scale-105 transition-transform active:scale-95 animate-bounce-slow"
+                    onClick={() => setIsRunning(!isRunning)}
+                    className={`font-black text-lg py-3 px-6 rounded-2xl shadow-lg border-b-4 transition-all hover:scale-105 active:scale-95 active:border-b-0 active:translate-y-1 ${
+                        isRunning 
+                        ? 'bg-orange-400 border-orange-600 text-white hover:bg-orange-500' 
+                        : 'bg-green-500 border-green-700 text-white hover:bg-green-600'
+                    }`}
                 >
-                GO! 🚦
+                    {isRunning ? '⏸ PAUSE' : '▶ GO!'}
                 </button>
-            ) : (
-                <div className="w-20"></div> // Spacer to keep layout balanced if button hidden
-            )}
+
+                <button 
+                    onClick={reset}
+                    className="bg-gray-100 border-b-4 border-gray-300 text-gray-600 font-bold text-lg py-3 px-6 rounded-2xl shadow-md transition-all hover:bg-gray-200 active:scale-95 active:border-b-0 active:translate-y-1"
+                >
+                    🔄 RESET
+                </button>
+            </div>
 
             {/* Top Right: Settings Button (Only visible if settings are closed) */}
             {!showSettings && (
@@ -160,23 +151,11 @@ const App: React.FC = () => {
             )}
         </div>
 
-        {/* Tip Bubble (Centered below top bar or responsive placement) */}
-        <div className="absolute top-20 left-0 right-0 flex justify-center pointer-events-none z-10 px-4">
-             <div className={`transition-all duration-500 transform ${showTip ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4'}`}>
-                {showTip && (
-                <div className="bg-white/90 backdrop-blur-md px-6 py-4 rounded-3xl shadow-lg border-2 border-indigo-200 animate-bounce-slow max-w-lg flex items-center gap-3">
-                    <span className="text-3xl">💡</span>
-                    <span className="text-gray-700 font-bold text-lg md:text-xl leading-snug">{safetyTip}</span>
-                </div>
-                )}
-            </div>
-        </div>
-
         {/* Main Center Area with Traffic Light */}
         <div className="flex-1 flex items-center justify-center pointer-events-auto mt-10">
           <TrafficLight 
             state={lightState} 
-            timeLeft={lightState === LightState.RED ? timer : undefined} 
+            timeLeft={timer} 
             orientation={orientation}
             hideTimer={shouldHideTimer}
           />
@@ -198,7 +177,6 @@ const App: React.FC = () => {
                setGameLevel={setGameLevel}
                orientation={orientation}
                setOrientation={setOrientation}
-               reset={reset}
                onClose={() => setShowSettings(false)}
              />
           </div>
