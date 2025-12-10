@@ -1,0 +1,5 @@
+{
+  "name": "Red Light Green Light Buddy",
+  "description": "An interactive traffic light simulator for kids. Learn about traffic safety with customizable red light timers, fun animations, and AI-powered safety tips while you wait!",
+  "requestFramePermissions": []
+}
