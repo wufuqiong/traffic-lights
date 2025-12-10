@@ -44,6 +44,13 @@ const App: React.FC = () => {
     }
   }, [gameLevel, userRedSetting, patienceDuration, isRunning]);
 
+  // Pause simulation when settings are opened
+  useEffect(() => {
+    if (showSettings && isRunning) {
+      setIsRunning(false);
+    }
+  }, [showSettings, isRunning]);
+
   // Main Timer Logic
   useEffect(() => {
     if (!isRunning) {
@@ -107,6 +114,12 @@ const App: React.FC = () => {
     }
   };
 
+  const handleOpenSettings = () => {
+    // Pause the simulation first, then open settings
+    setIsRunning(false);
+    setShowSettings(true);
+  };
+
   return (
     <div className="relative w-full h-screen bg-gray-50 overflow-hidden font-sans select-none flex flex-col">
       
@@ -143,10 +156,10 @@ const App: React.FC = () => {
             {/* Top Right: Settings Button (Only visible if settings are closed) */}
             {!showSettings && (
                 <button 
-                onClick={() => setShowSettings(true)}
-                className="bg-white/80 backdrop-blur-sm hover:bg-white p-3 rounded-full shadow-lg border-2 border-gray-200 hover:border-indigo-300 transition-all hover:rotate-90 active:scale-95"
+                  onClick={handleOpenSettings}
+                  className="bg-white/80 backdrop-blur-sm hover:bg-white p-3 rounded-full shadow-lg border-2 border-gray-200 hover:border-indigo-300 transition-all hover:rotate-90 active:scale-95"
                 >
-                <span className="text-3xl">⚙️</span>
+                  <span className="text-3xl">⚙️</span>
                 </button>
             )}
         </div>

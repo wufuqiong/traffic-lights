@@ -168,9 +168,9 @@ export const Controls: React.FC<ControlsProps> = ({
               </label>
               <input
                 type="range"
-                min="60"
-                max="300"
-                step="10"
+                min="0"
+                max="120"
+                step="1"
                 value={patienceDuration}
                 onChange={(e) => setPatienceDuration(Number(e.target.value))}
                 disabled={isRunning}

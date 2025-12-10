@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { LightState, Mode } from '../types';
 
+import { Scenery } from './Scenery';
+
 interface RoadSceneProps {
   lightState: LightState;
   mode: Mode;
@@ -13,11 +15,45 @@ interface Entity {
   speed: number;
   type: Mode;
   color: string;
+  icon: string; // Store the specific icon
+  size: number; // Vary the size
+  yOffset: number; // For variation in vertical placement
+  flip: boolean; // Whether to flip the emoji horizontally
 }
 
 const STOP_LINE_X = 40; // Percentage position of stop line
 const CAR_GAP = 15; // Minimum distance between cars
 const SPAWN_RATE_MS = 2500;
+
+// Road vehicle icons (with indication of which need flipping)
+const ROAD_VEHICLE_ICONS = [
+  { icon: '🚗', flip: true },  // Car facing left, need to flip
+  { icon: '🚕', flip: true },  // Taxi facing left, need to flip
+  { icon: '🚙', flip: true },  // SUV facing left, need to flip
+  { icon: '🚌', flip: true },  // Bus facing left, need to flip
+  { icon: '🚎', flip: true },  // Trolleybus facing left, need to flip
+  { icon: '🚓', flip: true },  // Police car facing left, need to flip
+  { icon: '🚑', flip: true },  // Ambulance facing left, need to flip
+  { icon: '🚒', flip: true },  // Fire engine facing left, need to flip
+  { icon: '🚐', flip: true },  // Minibus facing left, need to flip
+  { icon: '🚚', flip: true },  // Truck facing left, need to flip
+  { icon: '🚛', flip: true },  // Articulated lorry facing left, need to flip
+  { icon: '🛵', flip: false },  // Motor scooter (rider facing forward)
+  { icon: '🛺', flip: false },  // Auto rickshaw (facing right)
+];
+
+// People icons (with indication of which need flipping)
+const PEOPLE_ICONS = [
+  { icon: '🚶‍♂️', flip: true },  // Man walking facing left
+  { icon: '🚶‍♀️', flip: true },  // Woman walking facing left
+  { icon: '🏃‍♂️', flip: true },  // Man running facing left
+  { icon: '🏃‍♀️', flip: true },  // Woman running facing left
+  { icon: '🚴‍♂️', flip: true },  // Man biking facing left
+  { icon: '🚴‍♀️', flip: true },  // Woman biking facing left
+  { icon: '🚶', flip: true },   // Person walking facing left
+  { icon: '🏃', flip: true },   // Person running facing left
+  { icon: '🚴', flip: true },   // Person biking facing left
+];
 
 export const RoadScene: React.FC<RoadSceneProps> = ({ lightState, mode, isRunning }) => {
   return (
@@ -79,22 +115,51 @@ export const RoadScene: React.FC<RoadSceneProps> = ({ lightState, mode, isRunnin
   );
 };
 
-const Scenery = ({ isRunning }: { isRunning: boolean }) => {
-    return (
-        <>
-            <div className={`absolute top-10 left-10 text-6xl opacity-80 ${isRunning ? 'animate-bounce-slow' : ''}`}>☁️</div>
-            <div className={`absolute top-20 right-20 text-6xl opacity-60 ${isRunning ? 'animate-bounce-slow' : ''}`} style={{ animationDelay: '1s' }}>☁️</div>
-            <div className="absolute bottom-[33%] left-20 text-4xl">🌳</div>
-            <div className="absolute bottom-[33%] right-40 text-5xl">🌲</div>
-        </>
-    )
-}
-
 const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunning: boolean }> = ({ lightState, mode, isRunning }) => {
     const [entities, setEntities] = useState<Entity[]>([]);
     const nextId = useRef(0);
     const lastSpawnTime = useRef(0);
     const animationFrameRef = useRef<number>(0);
+
+    const getRandomIcon = (type: Mode): { icon: string; flip: boolean } => {
+        if (type === Mode.CAR) {
+            return ROAD_VEHICLE_ICONS[Math.floor(Math.random() * ROAD_VEHICLE_ICONS.length)];
+        } else {
+            return PEOPLE_ICONS[Math.floor(Math.random() * PEOPLE_ICONS.length)];
+        }
+    };
+
+    const getRandomSize = (type: Mode): number => {
+        if (type === Mode.CAR) {
+            return 4.5 + Math.random() * 1.5; // Vehicles: 4.5-6rem
+        } else {
+            return 3.5 + Math.random() * 1.5; // People: 3.5-5rem
+        }
+    };
+
+    const getRandomYOffset = (type: Mode): number => {
+        if (type === Mode.CAR) {
+            return Math.random() * 5 - 2.5; // -2.5 to 2.5 for vehicles
+        } else {
+            return Math.random() * 3 - 1.5; // -1.5 to 1.5 for people
+        }
+    };
+
+    const getRandomColor = (type: Mode): string => {
+        if (type === Mode.CAR) {
+            const hueRotations = [
+                '0deg', '20deg', '40deg', '60deg', '80deg', 
+                '100deg', '120deg', '140deg', '160deg', '180deg',
+                '200deg', '220deg', '240deg', '260deg', '280deg',
+                '300deg', '320deg', '340deg'
+            ];
+            return hueRotations[Math.floor(Math.random() * hueRotations.length)];
+        } else {
+            // People get subtle color variations
+            const saturations = ['100%', '110%', '90%', '80%'];
+            return saturations[Math.floor(Math.random() * saturations.length)];
+        }
+    };
 
     // Reset traffic when mode changes
     useEffect(() => {
@@ -110,15 +175,19 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
         const updateLoop = (timestamp: number) => {
             // 1. Spawning Logic
             if (timestamp - lastSpawnTime.current > SPAWN_RATE_MS) {
-                // Only spawn if the entrance is clear (last car is far enough)
                 const lastEntity = entities[entities.length - 1];
                 if (!lastEntity || lastEntity.x > -5) {
+                    const randomIcon = getRandomIcon(mode);
                     const newEntity: Entity = {
                         id: nextId.current++,
                         x: -20, // Start off-screen left
                         speed: 0,
                         type: mode,
-                        color: getRandomColor()
+                        icon: randomIcon.icon,
+                        color: getRandomColor(mode),
+                        size: getRandomSize(mode),
+                        yOffset: getRandomYOffset(mode),
+                        flip: randomIcon.flip
                     };
                     setEntities(prev => [...prev, newEntity]);
                     lastSpawnTime.current = timestamp;
@@ -127,20 +196,12 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
 
             // 2. Movement & Queuing Logic
             setEntities(prevEntities => {
-                // Process from rightmost (closest to exit) to leftmost (newest)
-                // We map then sort back if needed, but array order implies spawn order (newest last).
-                // Actually, iterating standard array: index 0 is oldest (furthest right usually).
-                
                 return prevEntities.map((entity, index) => {
-                    // Find target limit
                     let limitX = 200; // Default: drive off screen
 
                     // Rule 1: Traffic Light Limit
-                    // Only applies if the entity is BEFORE the stop line.
-                    // If they already crossed it (x > STOP_LINE_X), they ignore the light.
                     if (lightState === LightState.RED || lightState === LightState.YELLOW) {
                         if (entity.x < STOP_LINE_X) {
-                            // Stop slightly before the line
                             limitX = STOP_LINE_X - 6; 
                         }
                     }
@@ -157,21 +218,17 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
                     const distToLimit = limitX - entity.x;
 
                     if (distToLimit > 2) {
-                        // Clear road ahead, accelerate
-                        newSpeed = Math.min(newSpeed + 0.02, 0.4); 
+                        newSpeed = Math.min(newSpeed + 0.02, entity.type === Mode.CAR ? 0.4 : 0.3);
                     } else if (distToLimit > 0.1) {
-                        // Getting close, slow down smoothly
                         newSpeed = distToLimit * 0.05;
                     } else {
-                        // Stopped
                         newSpeed = 0;
                     }
 
-                    // Update Position
                     let newX = entity.x + newSpeed;
 
                     return { ...entity, x: newX, speed: newSpeed };
-                }).filter(e => e.x < 120); // Remove entities that drove off screen
+                }).filter(e => e.x < 120);
             });
 
             animationFrameRef.current = requestAnimationFrame(updateLoop);
@@ -179,29 +236,58 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
 
         animationFrameRef.current = requestAnimationFrame(updateLoop);
         return () => cancelAnimationFrame(animationFrameRef.current);
-    }, [isRunning, lightState, mode, entities.length]); // Dependencies for effect recreation
+    }, [isRunning, lightState, mode, entities.length]);
 
     return (
         <>
             {entities.map(entity => (
                 <div 
                     key={entity.id}
-                    className="absolute text-7xl transition-transform will-change-transform"
+                    className="absolute transition-transform will-change-transform"
                     style={{ 
                         left: `${entity.x}%`,
-                        // Flip car to face right. Add a little bounce if moving fast.
-                        transform: `scaleX(-1) translateY(${entity.speed > 0.1 ? (Date.now() % 200 > 100 ? -2 : 0) : 0}px)`,
-                        filter: entity.type === Mode.CAR ? `hue-rotate(${entity.color})` : 'none'
+                        bottom: `${entity.type === Mode.CAR ? 0 : 4}px`, // People are slightly above road
+                        fontSize: `${entity.size}rem`,
+                        filter: entity.type === Mode.CAR ? 
+                            `hue-rotate(${entity.color})` : 
+                            `saturate(${entity.color})`,
+                        animation: entity.type === Mode.CAR && entity.speed > 0.1 ? 
+                            'carBounce 0.5s infinite alternate' : 
+                            entity.type !== Mode.CAR && entity.speed > 0 ? 
+                            'walkAnimation 0.5s infinite alternate' : 'none',
+                        transform: entity.flip ? 'scaleX(-1)' : 'none',
+                        transformOrigin: 'center'
                     }}
                 >
-                    {entity.type === Mode.CAR ? '🚗' : '🚶'}
+                    {entity.icon}
                 </div>
             ))}
+            
+            {/* Add CSS animations */}
+            <style>{`
+                @keyframes carBounce {
+                    0% { transform: translateY(0px) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; }
+                    100% { transform: translateY(-2px) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; }
+                }
+                
+                @keyframes walkAnimation {
+                    0% { 
+                        transform: translateY(0px) rotate(0deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
+                    }
+                    25% { 
+                        transform: translateY(-2px) rotate(2deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
+                    }
+                    50% { 
+                        transform: translateY(0px) rotate(0deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
+                    }
+                    75% { 
+                        transform: translateY(-2px) rotate(-2deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
+                    }
+                    100% { 
+                        transform: translateY(0px) rotate(0deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
+                    }
+                }
+            `}</style>
         </>
     );
 };
-
-const getRandomColor = () => {
-    const colors = ['0deg', '45deg', '90deg', '180deg', '220deg', '300deg'];
-    return colors[Math.floor(Math.random() * colors.length)];
-}
