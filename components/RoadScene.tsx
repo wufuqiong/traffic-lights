@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { LightState, Mode } from '../types';
-
 import { Scenery } from './Scenery';
 
 interface RoadSceneProps {
@@ -56,6 +55,8 @@ const PEOPLE_ICONS = [
 ];
 
 export const RoadScene: React.FC<RoadSceneProps> = ({ lightState, mode, isRunning }) => {
+  console.log('RoadScene render:', { lightState, mode, isRunning }); // Debug log
+  
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
       {/* Sky Background Gradient */}
@@ -111,15 +112,76 @@ export const RoadScene: React.FC<RoadSceneProps> = ({ lightState, mode, isRunnin
       <div className="absolute bottom-16 w-full h-24 flex items-end">
          <TrafficController lightState={lightState} mode={mode} isRunning={isRunning} />
       </div>
+      
+      {/* Add static CSS animations */}
+      <style>{`
+        @keyframes carBounce {
+          0% { transform: translateY(0px); }
+          100% { transform: translateY(-2px); }
+        }
+        
+        @keyframes carBounceFlipped {
+          0% { transform: translateY(0px) scaleX(-1); }
+          100% { transform: translateY(-2px) scaleX(-1); }
+        }
+        
+        @keyframes walkAnimation {
+          0% { 
+            transform: translateY(0px) rotate(0deg); 
+          }
+          25% { 
+            transform: translateY(-2px) rotate(2deg); 
+          }
+          50% { 
+            transform: translateY(0px) rotate(0deg); 
+          }
+          75% { 
+            transform: translateY(-2px) rotate(-2deg); 
+          }
+          100% { 
+            transform: translateY(0px) rotate(0deg); 
+          }
+        }
+        
+        @keyframes walkAnimationFlipped {
+          0% { 
+            transform: translateY(0px) rotate(0deg) scaleX(-1); 
+          }
+          25% { 
+            transform: translateY(-2px) rotate(2deg) scaleX(-1); 
+          }
+          50% { 
+            transform: translateY(0px) rotate(0deg) scaleX(-1); 
+          }
+          75% { 
+            transform: translateY(-2px) rotate(-2deg) scaleX(-1); 
+          }
+          100% { 
+            transform: translateY(0px) rotate(0deg) scaleX(-1); 
+          }
+        }
+      `}</style>
     </div>
   );
 };
 
-const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunning: boolean }> = ({ lightState, mode, isRunning }) => {
+const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunning: boolean }> = ({ 
+  lightState, 
+  mode, 
+  isRunning 
+}) => {
+    console.log('TrafficController render:', { isRunning, mode, lightState }); // Debug log
+    
     const [entities, setEntities] = useState<Entity[]>([]);
     const nextId = useRef(0);
-    const lastSpawnTime = useRef(0);
+    const lastSpawnTime = useRef<number>(0);
     const animationFrameRef = useRef<number>(0);
+    const entitiesRef = useRef<Entity[]>([]);
+    
+    // Sync ref with state
+    useEffect(() => {
+        entitiesRef.current = entities;
+    }, [entities]);
 
     const getRandomIcon = (type: Mode): { icon: string; flip: boolean } => {
         if (type === Mode.CAR) {
@@ -155,7 +217,6 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
             ];
             return hueRotations[Math.floor(Math.random() * hueRotations.length)];
         } else {
-            // People get subtle color variations
             const saturations = ['100%', '110%', '90%', '80%'];
             return saturations[Math.floor(Math.random() * saturations.length)];
         }
@@ -163,25 +224,56 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
 
     // Reset traffic when mode changes
     useEffect(() => {
+        console.log('Mode changed, resetting entities');
         setEntities([]);
+        nextId.current = 0;
+        lastSpawnTime.current = 0;
     }, [mode]);
 
+    // Clean up on unmount
     useEffect(() => {
+        return () => {
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+            }
+        };
+    }, []);
+
+    // Main animation loop
+    useEffect(() => {
+        console.log('Animation effect triggered, isRunning:', isRunning);
+        
         if (!isRunning) {
-            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            console.log('Not running, cleaning up');
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+                animationFrameRef.current = 0;
+            }
             return;
         }
+
+        console.log('Starting animation loop');
+        lastSpawnTime.current = performance.now(); // Initialize with current time
 
         const updateLoop = (timestamp: number) => {
             // 1. Spawning Logic
             if (timestamp - lastSpawnTime.current > SPAWN_RATE_MS) {
-                const lastEntity = entities[entities.length - 1];
+                const currentEntities = entitiesRef.current;
+                const lastEntity = currentEntities[currentEntities.length - 1];
+                
+                console.log('Spawning check:', { 
+                    timestamp, 
+                    lastSpawnTime: lastSpawnTime.current, 
+                    entitiesCount: currentEntities.length,
+                    lastEntityX: lastEntity?.x 
+                });
+                
                 if (!lastEntity || lastEntity.x > -5) {
                     const randomIcon = getRandomIcon(mode);
                     const newEntity: Entity = {
                         id: nextId.current++,
                         x: -20, // Start off-screen left
-                        speed: 0,
+                        speed: 0.3, // Start with some speed
                         type: mode,
                         icon: randomIcon.icon,
                         color: getRandomColor(mode),
@@ -189,6 +281,7 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
                         yOffset: getRandomYOffset(mode),
                         flip: randomIcon.flip
                     };
+                    console.log('Spawning new entity:', newEntity);
                     setEntities(prev => [...prev, newEntity]);
                     lastSpawnTime.current = timestamp;
                 }
@@ -196,7 +289,12 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
 
             // 2. Movement & Queuing Logic
             setEntities(prevEntities => {
-                return prevEntities.map((entity, index) => {
+                if (prevEntities.length === 0) {
+                    console.log('No entities to move');
+                    return prevEntities;
+                }
+                
+                const newEntities = prevEntities.map((entity, index) => {
                     let limitX = 200; // Default: drive off screen
 
                     // Rule 1: Traffic Light Limit
@@ -229,65 +327,61 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
 
                     return { ...entity, x: newX, speed: newSpeed };
                 }).filter(e => e.x < 120);
+                
+                console.log('Moved entities, count:', newEntities.length);
+                return newEntities;
             });
 
             animationFrameRef.current = requestAnimationFrame(updateLoop);
         };
 
         animationFrameRef.current = requestAnimationFrame(updateLoop);
-        return () => cancelAnimationFrame(animationFrameRef.current);
-    }, [isRunning, lightState, mode, entities.length]);
+        
+        return () => {
+            console.log('Cleaning up animation frame');
+            if (animationFrameRef.current) {
+                cancelAnimationFrame(animationFrameRef.current);
+                animationFrameRef.current = 0;
+            }
+        };
+    }, [isRunning, lightState, mode]); // Removed entities from dependencies
 
+    console.log('Rendering entities:', entities.length);
+    
     return (
         <>
-            {entities.map(entity => (
-                <div 
-                    key={entity.id}
-                    className="absolute transition-transform will-change-transform"
-                    style={{ 
-                        left: `${entity.x}%`,
-                        bottom: `${entity.type === Mode.CAR ? 0 : 4}px`, // People are slightly above road
-                        fontSize: `${entity.size}rem`,
-                        filter: entity.type === Mode.CAR ? 
-                            `hue-rotate(${entity.color})` : 
-                            `saturate(${entity.color})`,
-                        animation: entity.type === Mode.CAR && entity.speed > 0.1 ? 
-                            'carBounce 0.5s infinite alternate' : 
-                            entity.type !== Mode.CAR && entity.speed > 0 ? 
-                            'walkAnimation 0.5s infinite alternate' : 'none',
-                        transform: entity.flip ? 'scaleX(-1)' : 'none',
-                        transformOrigin: 'center'
-                    }}
-                >
-                    {entity.icon}
-                </div>
-            ))}
-            
-            {/* Add CSS animations */}
-            <style>{`
-                @keyframes carBounce {
-                    0% { transform: translateY(0px) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; }
-                    100% { transform: translateY(-2px) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; }
+            {entities.map(entity => {
+                const isMoving = entity.type === Mode.CAR ? entity.speed > 0.1 : entity.speed > 0;
+                let animation = '';
+                
+                if (isMoving) {
+                    if (entity.type === Mode.CAR) {
+                        animation = entity.flip ? 'carBounceFlipped 0.5s infinite alternate' : 'carBounce 0.5s infinite alternate';
+                    } else {
+                        animation = entity.flip ? 'walkAnimationFlipped 0.5s infinite alternate' : 'walkAnimation 0.5s infinite alternate';
+                    }
                 }
                 
-                @keyframes walkAnimation {
-                    0% { 
-                        transform: translateY(0px) rotate(0deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
-                    }
-                    25% { 
-                        transform: translateY(-2px) rotate(2deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
-                    }
-                    50% { 
-                        transform: translateY(0px) rotate(0deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
-                    }
-                    75% { 
-                        transform: translateY(-2px) rotate(-2deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
-                    }
-                    100% { 
-                        transform: translateY(0px) rotate(0deg) ${entities.find(e => e.flip) ? 'scaleX(-1)' : ''}; 
-                    }
-                }
-            `}</style>
+                return (
+                    <div 
+                        key={entity.id}
+                        className="absolute will-change-transform"
+                        style={{ 
+                            left: `${entity.x}%`,
+                            bottom: `${entity.type === Mode.CAR ? 0 : 4}px`,
+                            fontSize: `${entity.size}rem`,
+                            filter: entity.type === Mode.CAR ? 
+                                `hue-rotate(${entity.color})` : 
+                                `saturate(${entity.color})`,
+                            animation: animation,
+                            transform: !isMoving && entity.flip ? 'scaleX(-1)' : 'none',
+                            transformOrigin: 'center'
+                        }}
+                    >
+                        {entity.icon}
+                    </div>
+                );
+            })}
         </>
     );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { TrafficLight } from './components/TrafficLight';
 import { Controls } from './components/Controls';
 import { RoadScene } from './components/RoadScene';
@@ -23,24 +23,22 @@ const App: React.FC = () => {
   const [isRunning, setIsRunning] = useState<boolean>(false);
 
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const timerIdRef = useRef<number | null>(null);
 
   // Derived State
   const mode = gameLevel === GameLevel.WALKER_NORMAL ? Mode.WALK : Mode.CAR;
   
-  // Logic to hide timer in Patience Level (Only applies to Red light)
+  // Logic to hide timer in Patience Level
   const shouldHideTimer = gameLevel === GameLevel.LONG_WAIT && lightState === LightState.RED && timer > 15;
 
-  // Initialize and Handle Game Level Changes
+  // Initialize timer
   useEffect(() => {
-    // Stop and Reset logic whenever level or settings change while not running
     if (!isRunning) {
-        setLightState(LightState.RED);
-        
-        if (gameLevel === GameLevel.LONG_WAIT) {
-            setTimer(patienceDuration);
-        } else {
-            setTimer(userRedSetting);
-        }
+      if (gameLevel === GameLevel.LONG_WAIT) {
+        setTimer(patienceDuration);
+      } else {
+        setTimer(userRedSetting);
+      }
     }
   }, [gameLevel, userRedSetting, patienceDuration, isRunning]);
 
@@ -51,73 +49,99 @@ const App: React.FC = () => {
     }
   }, [showSettings, isRunning]);
 
-  // Main Timer Logic
+  const handleStateTransition = useCallback(() => {
+    setLightState((prevState) => {
+      let newTimer = 0;
+      
+      switch (prevState) {
+        case LightState.RED:
+          newTimer = userGreenSetting;
+          setTimer(newTimer);
+          return LightState.GREEN;
+          
+        case LightState.GREEN:
+          newTimer = YELLOW_DURATION;
+          setTimer(newTimer);
+          return LightState.YELLOW;
+          
+        case LightState.YELLOW:
+          newTimer = gameLevel === GameLevel.LONG_WAIT ? patienceDuration : userRedSetting;
+          setTimer(newTimer);
+          return LightState.RED;
+          
+        default:
+          newTimer = userRedSetting;
+          setTimer(newTimer);
+          return LightState.RED;
+      }
+    });
+  }, [userRedSetting, userGreenSetting, patienceDuration, gameLevel]);
+
+  // Main Timer Logic - Simplified
   useEffect(() => {
     if (!isRunning) {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
+      }
+      if (timerIdRef.current) {
+        clearTimeout(timerIdRef.current);
+        timerIdRef.current = null;
+      }
       return;
     }
 
+    // Clear any existing timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+
+    // Start new timer
     timerIntervalRef.current = setInterval(() => {
-      setTimer((prev) => {
-        if (prev <= 1) {
-          handleStateTransition();
-          return 0; // Temporary 0 before state switch
+      setTimer((prevTimer) => {
+        if (prevTimer <= 1) {
+          // Schedule state transition in next tick
+          setTimeout(handleStateTransition, 0);
+          return 0;
         }
-        return prev - 1;
+        return prevTimer - 1;
       });
     }, 1000);
 
     return () => {
-      if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isRunning, lightState, userRedSetting, userGreenSetting, patienceDuration, gameLevel]); 
-
-  const handleStateTransition = () => {
-    setLightState((prevState) => {
-      switch (prevState) {
-        case LightState.RED:
-          // Red -> Green
-          setTimer(userGreenSetting);
-          return LightState.GREEN;
-          
-        case LightState.GREEN:
-          // Green -> Yellow
-          setTimer(YELLOW_DURATION);
-          return LightState.YELLOW;
-          
-        case LightState.YELLOW:
-          // Yellow -> Red
-          let nextRedDuration = userRedSetting;
-          if (gameLevel === GameLevel.LONG_WAIT) {
-             nextRedDuration = patienceDuration;
-          }
-          setTimer(nextRedDuration);
-          return LightState.RED;
-          
-        default:
-          return LightState.RED;
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+        timerIntervalRef.current = null;
       }
-    });
-  };
+    };
+  }, [isRunning, handleStateTransition]);
 
   const reset = () => {
     setIsRunning(false);
+    
+    // Clear timer
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+      timerIntervalRef.current = null;
+    }
+    
+    // Reset state
     setLightState(LightState.RED);
     
-    // Reset timer based on current level logic
+    // Reset timer
     if (gameLevel === GameLevel.LONG_WAIT) {
-        setTimer(patienceDuration);
+      setTimer(patienceDuration);
     } else {
-        setTimer(userRedSetting);
+      setTimer(userRedSetting);
     }
   };
 
   const handleOpenSettings = () => {
-    // Pause the simulation first, then open settings
     setIsRunning(false);
-    setShowSettings(true);
+    // Use setTimeout to ensure state update happens before opening settings
+    setTimeout(() => {
+      setShowSettings(true);
+    }, 10);
   };
 
   return (
@@ -153,7 +177,7 @@ const App: React.FC = () => {
                 </button>
             </div>
 
-            {/* Top Right: Settings Button (Only visible if settings are closed) */}
+            {/* Top Right: Settings Button */}
             {!showSettings && (
                 <button 
                   onClick={handleOpenSettings}

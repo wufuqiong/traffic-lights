@@ -7,8 +7,13 @@ export default defineConfig({
   plugins: [react()],
   base: '/traffic-lights/',
   build: {
-    outDir: 'dist',
-    sourcemap: false
+    sourcemap: false,
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: false, // Keep console logs for debugging
+      },
+    },
   },
   server: {
     port: 3000
