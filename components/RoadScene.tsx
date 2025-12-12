@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { LightState, Mode } from '../types';
 import { Scenery } from './Scenery';
+import { PATIENCE_MAX_DURATION } from './Controls';
 
 interface RoadSceneProps {
   lightState: LightState;
@@ -21,7 +22,7 @@ interface Entity {
 }
 
 const STOP_LINE_X = 40; // Percentage position of stop line
-const CAR_GAP = 15; // Minimum distance between cars
+const CAR_GAP = 10; // Minimum distance between cars
 const SPAWN_RATE_MS = 2500;
 
 // Road vehicle icons (with indication of which need flipping)
@@ -37,8 +38,8 @@ const ROAD_VEHICLE_ICONS = [
   { icon: '🚐', flip: true },  // Minibus facing left, need to flip
   { icon: '🚚', flip: true },  // Truck facing left, need to flip
   { icon: '🚛', flip: true },  // Articulated lorry facing left, need to flip
-  { icon: '🛵', flip: false },  // Motor scooter (rider facing forward)
-  { icon: '🛺', flip: false },  // Auto rickshaw (facing right)
+  { icon: '🛵', flip: true },  // Motor scooter (rider facing forward)
+  { icon: '🛺', flip: true },  // Auto rickshaw (facing right)
 ];
 
 // People icons (with indication of which need flipping)
@@ -55,8 +56,6 @@ const PEOPLE_ICONS = [
 ];
 
 export const RoadScene: React.FC<RoadSceneProps> = ({ lightState, mode, isRunning }) => {
-  console.log('RoadScene render:', { lightState, mode, isRunning }); // Debug log
-  
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none z-0">
       {/* Sky Background Gradient */}
@@ -170,8 +169,6 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
   mode, 
   isRunning 
 }) => {
-    console.log('TrafficController render:', { isRunning, mode, lightState }); // Debug log
-    
     const [entities, setEntities] = useState<Entity[]>([]);
     const nextId = useRef(0);
     const lastSpawnTime = useRef<number>(0);
@@ -224,7 +221,6 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
 
     // Reset traffic when mode changes
     useEffect(() => {
-        console.log('Mode changed, resetting entities');
         setEntities([]);
         nextId.current = 0;
         lastSpawnTime.current = 0;
@@ -239,12 +235,9 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
         };
     }, []);
 
-    // Main animation loop
+    // Main animation loop - SIMPLIFIED
     useEffect(() => {
-        console.log('Animation effect triggered, isRunning:', isRunning);
-        
         if (!isRunning) {
-            console.log('Not running, cleaning up');
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
                 animationFrameRef.current = 0;
@@ -252,28 +245,24 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
             return;
         }
 
-        console.log('Starting animation loop');
-        lastSpawnTime.current = performance.now(); // Initialize with current time
-
-        const updateLoop = (timestamp: number) => {
+        let lastTime = performance.now();
+        
+        const updateLoop = (currentTime: number) => {
+            if (!isRunning) return;
+            
+            const delta = currentTime - lastTime;
+            
             // 1. Spawning Logic
-            if (timestamp - lastSpawnTime.current > SPAWN_RATE_MS) {
+            if (currentTime - lastSpawnTime.current > SPAWN_RATE_MS) {
                 const currentEntities = entitiesRef.current;
                 const lastEntity = currentEntities[currentEntities.length - 1];
-                
-                console.log('Spawning check:', { 
-                    timestamp, 
-                    lastSpawnTime: lastSpawnTime.current, 
-                    entitiesCount: currentEntities.length,
-                    lastEntityX: lastEntity?.x 
-                });
                 
                 if (!lastEntity || lastEntity.x > -5) {
                     const randomIcon = getRandomIcon(mode);
                     const newEntity: Entity = {
                         id: nextId.current++,
                         x: -20, // Start off-screen left
-                        speed: 0.3, // Start with some speed
+                        speed: 0.3, // Initial speed
                         type: mode,
                         icon: randomIcon.icon,
                         color: getRandomColor(mode),
@@ -281,20 +270,17 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
                         yOffset: getRandomYOffset(mode),
                         flip: randomIcon.flip
                     };
-                    console.log('Spawning new entity:', newEntity);
+                    
                     setEntities(prev => [...prev, newEntity]);
-                    lastSpawnTime.current = timestamp;
+                    lastSpawnTime.current = currentTime;
                 }
             }
 
             // 2. Movement & Queuing Logic
-            setEntities(prevEntities => {
-                if (prevEntities.length === 0) {
-                    console.log('No entities to move');
-                    return prevEntities;
-                }
+            setEntities(prev => {
+                if (prev.length === 0) return prev;
                 
-                const newEntities = prevEntities.map((entity, index) => {
+                return prev.map((entity, index) => {
                     let limitX = 200; // Default: drive off screen
 
                     // Rule 1: Traffic Light Limit
@@ -306,7 +292,7 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
 
                     // Rule 2: Car Ahead Limit
                     if (index > 0) {
-                        const carAhead = prevEntities[index - 1];
+                        const carAhead = prev[index - 1];
                         const trafficLimit = carAhead.x - CAR_GAP;
                         limitX = Math.min(limitX, trafficLimit);
                     }
@@ -326,28 +312,23 @@ const TrafficController: React.FC<{ lightState: LightState; mode: Mode; isRunnin
                     let newX = entity.x + newSpeed;
 
                     return { ...entity, x: newX, speed: newSpeed };
-                }).filter(e => e.x < 120);
-                
-                console.log('Moved entities, count:', newEntities.length);
-                return newEntities;
+                }).filter(e => e.x < PATIENCE_MAX_DURATION);
             });
 
+            lastTime = currentTime;
             animationFrameRef.current = requestAnimationFrame(updateLoop);
         };
 
         animationFrameRef.current = requestAnimationFrame(updateLoop);
         
         return () => {
-            console.log('Cleaning up animation frame');
             if (animationFrameRef.current) {
                 cancelAnimationFrame(animationFrameRef.current);
                 animationFrameRef.current = 0;
             }
         };
-    }, [isRunning, lightState, mode]); // Removed entities from dependencies
+    }, [isRunning, lightState, mode]);
 
-    console.log('Rendering entities:', entities.length);
-    
     return (
         <>
             {entities.map(entity => {

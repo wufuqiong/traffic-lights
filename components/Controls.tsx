@@ -17,6 +17,9 @@ interface ControlsProps {
   onClose: () => void;
 }
 
+export const DEFAULT_DURATION = 10;
+export const PATIENCE_MAX_DURATION = 120;
+
 export const Controls: React.FC<ControlsProps> = ({
   redDuration,
   setRedDuration,
@@ -169,7 +172,7 @@ export const Controls: React.FC<ControlsProps> = ({
               <input
                 type="range"
                 min="0"
-                max="120"
+                max={PATIENCE_MAX_DURATION}
                 step="1"
                 value={patienceDuration}
                 onChange={(e) => setPatienceDuration(Number(e.target.value))}
@@ -178,7 +181,7 @@ export const Controls: React.FC<ControlsProps> = ({
               />
             </div>
              <div className="text-xs text-yellow-800">
-               ⚠️ Timer is hidden until the last 15 seconds.
+               ⚠️ Timer is hidden until the last {DEFAULT_DURATION} seconds.
              </div>
           </div>
         )}
